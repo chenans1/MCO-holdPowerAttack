@@ -17,7 +17,8 @@ namespace settings {
     constexpr auto general = "General";
 
     std::mutex configMutex;
-    settings::config activeConfig{};
+    config activeConfig{};
+
     bool unsavedChanges = false;
 
     float readFloat(const CSimpleIniA& ini, const char* section, const char* key, const float fallback) {
@@ -61,13 +62,11 @@ namespace settings {
             setting_definitions);
     }
 
-    config Get() {
-        std::scoped_lock lock(configMutex);
+    config& Get() {
         return activeConfig;
     }
 
     void Set(const config& value) {
-        std::scoped_lock lock(configMutex);
         activeConfig = value;
     }
 
@@ -99,7 +98,7 @@ namespace settings {
     }
 
     bool Save() {
-        const config current = Get();
+        const config& current = Get();
         CSimpleIniA ini;
         ini.SetUnicode(false);
         (void)ini.LoadFile(iniPath);  // Preserve unrecognized keys from newer versions.
@@ -119,9 +118,8 @@ namespace settings {
         return true;
     }
 
-    static void FinishMenuPage(const config& current, bool changed) {
+    static void FinishMenuPage(bool changed) {
         if (changed) {
-            Set(current);  // Apply slider and checkbox changes immediately.
             unsavedChanges = true;
         }
         ImGuiMCP::Separator();
@@ -141,12 +139,12 @@ namespace settings {
     }
 
     void __stdcall RenderMenuPage() {
-        config cfg = Get();
+        auto cfg = Get();
         bool changed = false;
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
         changed |= ImGuiMCP::Checkbox("Enable Log", &cfg.log);
 
-        FinishMenuPage(cfg, changed);
+        FinishMenuPage(changed);
     }
 
     void RegisterMenu() { 

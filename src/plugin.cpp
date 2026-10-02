@@ -48,23 +48,23 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 
     // SKSE::AllocTrampoline(14);
-    // hooks::Install();
-    // SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
-    //     switch (msg->type) {
-    //         case SKSE::MessagingInterface::kPostLoad:
-    //             settings::RegisterMenu();
-    //             break;
-    //         case SKSE::MessagingInterface::kDataLoaded:
-    //             settings::Load();
-    //             if (hooks::Load()) {
-    //                 log::info("EldenParryRemake: Loaded Forms");
-    //                 hooks::Install(); 
-    //             } else {
-    //                 log::critical("Required forms could not be loaded; hooks will not be installed");
-    //             }
-    //             break;
-    //         }
-    // });
+    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
+        switch (msg->type) {
+            // case SKSE::MessagingInterface::kPostLoad:
+            //     settings::RegisterMenu();
+            //     break;
+            case SKSE::MessagingInterface::kDataLoaded:
+                settings::Load();
+                settings::RegisterMenu();
+                if (hooks::Load()) {
+                    log::info("HoldPowerAttack: Loaded Forms");
+                    hooks::Install(); 
+                } else {
+                    log::critical("Required forms could not be loaded; hooks will not be installed");
+                }
+                break;
+            }
+    });
     log::info("{} has finished loading.", plugin->GetName());
     return true;
 }
