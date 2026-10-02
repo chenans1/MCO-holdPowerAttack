@@ -62,7 +62,7 @@ namespace settings {
             setting_definitions);
     }
 
-    config& Get() {
+    config Get() {
         return activeConfig;
     }
 
@@ -142,7 +142,11 @@ namespace settings {
         auto cfg = Get();
         bool changed = false;
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
+        changed |= ImGuiMCP::Checkbox("Bashing requires block key to be held", &cfg.eldenCounterMode);
         changed |= ImGuiMCP::Checkbox("Enable Log", &cfg.log);
+        if (changed) {
+            Set(cfg);
+        }
 
         FinishMenuPage(changed);
     }
