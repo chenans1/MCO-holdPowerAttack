@@ -202,23 +202,44 @@ class hooks {
                     if (cfg.leftAttackPA) {
                         const bool leftSpell = utils::isLeftSpell(player);
                         const bool stationary = utils::isNeutral();
+                        const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
 
-                        switch (cfg.defaultBehaviorMode) {
-                        case 0: // Stationary uses the default block/cast; movement uses power attack.
-                            usePowerAttack = !stationary;
-                            break;
-                        case 1: // Moving uses the default block/cast; stationary uses power attack.
-                            usePowerAttack = stationary;
-                            break;
-                        case 2: // Stationary spell cast; non-spell input becomes power attack.
-                            usePowerAttack = !leftSpell || !stationary;
-                            break;
-                        case 3: // Moving spell cast; non-spell input becomes power attack.
-                            usePowerAttack = !leftSpell || stationary;
-                            break;
-                        default:
-                            usePowerAttack = false;
-                            break;
+                        if (cfg.modifierModeLeftPA > 0) {
+                            switch (cfg.modifierModeLeftPA) {
+                            case 1: // Modifier forces PA; plain left input keeps cast/block behavior.
+                                usePowerAttack = modifierHeld;
+                                break;
+                            case 2: // Modifier forces PA; plain left casts with a spell, otherwise PA.
+                                usePowerAttack = modifierHeld || !leftSpell;
+                                break;
+                            case 3: // Modifier keeps cast/block behavior; plain left forces PA.
+                                usePowerAttack = !modifierHeld;
+                                break;
+                            case 4: // Modifier casts with a spell, otherwise PA; plain left forces PA.
+                                usePowerAttack = !modifierHeld || !leftSpell;
+                                break;
+                            default:
+                                usePowerAttack = false;
+                                break;
+                            }
+                        } else {
+                            switch (cfg.defaultBehaviorMode) {
+                            case 0: // Stationary uses the default block/cast; movement uses power attack.
+                                usePowerAttack = !stationary;
+                                break;
+                            case 1: // Moving uses the default block/cast; stationary uses power attack.
+                                usePowerAttack = stationary;
+                                break;
+                            case 2: // Stationary spell cast; non-spell input becomes power attack.
+                                usePowerAttack = !leftSpell || !stationary;
+                                break;
+                            case 3: // Moving spell cast; non-spell input becomes power attack.
+                                usePowerAttack = !leftSpell || stationary;
+                                break;
+                            default:
+                                usePowerAttack = false;
+                                break;
+                            }
                         }
                     }
 

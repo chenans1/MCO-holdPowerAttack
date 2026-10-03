@@ -346,8 +346,22 @@ namespace settings {
             cfg.defaultBehaviorMode = 0;
             changed = true;
         }
+        static constexpr const char* modifierLeftAttackModes[] = {
+            "Disabled",
+            "Mod+Left: PA; Left: cast/block",
+            "Mod+Left: PA; Left: cast/PA",
+            "Mod+Left: cast/block; Left: PA",
+            "Mod+Left: cast/PA; Left: PA"
+        };
+        if (cfg.modifierModeLeftPA < 0 || cfg.modifierModeLeftPA >= 5) {
+            cfg.modifierModeLeftPA = 0;
+            changed = true;
+        }
         ImGuiMCP::BeginDisabled(!cfg.leftAttackPA);
-        changed |= ImGuiMCP::Combo("Left Attack Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
+        changed |= ImGuiMCP::Combo("Modifier + Left Attack Mode", &cfg.modifierModeLeftPA, modifierLeftAttackModes, 5);
+        ImGuiMCP::BeginDisabled(cfg.modifierModeLeftPA != 0);
+        changed |= ImGuiMCP::Combo("Left Attack Movement Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
+        ImGuiMCP::EndDisabled();
         ImGuiMCP::EndDisabled();
 
         

@@ -19,14 +19,19 @@ namespace settings {
         bool useModifierAltPA = false;
 
         bool leftAttackPA = false;
-        // 0 means stationary for left spell/staff cast or block, movement is power attack.
-        // 1 means movement for left spell/staff cast or block, stationary is power attack.
-        // 2 means stationary for left spell/staff cast only. Block always ends up replaced by power attack, movement is power attack
-        // 3 means movement for left spell/staff cast only. bBlock always ends up replaced by power attack, stationary is power attack
+        // 0 stationary for left spell/staff/block, movement is power attack.
+        // 1 movement for left spell/staff/block, stationary is power attack.
+        // 2 stationary for left spell/staff cast only. Block, movement is power attack
+        // 3 movement for left spell/staff cast only. Block, stationary is power attack
         int defaultBehaviorMode = 0;
-        //0 - disabled, 1 means MOD + LA = PA / LA = Cast/Block, 2 - Mod+LA -> cast/block | LA = PA, 
-        // 3 - mod+LA -> Cast/PA, LA = PA
-        int useModifierLeftPA = 0;
+        //for: isNeutral also accepts forward vec
+        bool excludeFWD = false;
+        // 0 - disabled.
+        // 1 - Mod+Left = PA | Left = Cast/Block
+        // 2 - Mod+Left = PA | Left = Cast/PA
+        // 3 - Mod+Left -> cast/block | Left = PA
+        // 4 - Mod+Left -> cast/PA | Left = PA
+        int modifierModeLeftPA = 0;
     };
     
     template <class T>
@@ -49,6 +54,7 @@ namespace settings {
         setting_definition<bool>{ "useModifierAltPA", &settings::config::useModifierAltPA },
         setting_definition<bool>{ "leftAttackPA", &settings::config::leftAttackPA },
         setting_definition<int>{ "defaultBehaviorMode", &settings::config::defaultBehaviorMode },
+        setting_definition<int>{ "modifierModeLeftPA", &settings::config::modifierModeLeftPA },
     };
 
     config Get();
