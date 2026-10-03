@@ -138,22 +138,24 @@ class hooks {
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {
                     alreadyPerformed.store(false, std::memory_order_relaxed);
-                    rightAttackUsesModifierMode.store(cfg.modifierRightMode, std::memory_order_relaxed);
-                    if (cfg.modifierRightMode) {
-                        rightAttackUsesVanilla.store(false, std::memory_order_relaxed);
-                        rightAttackCancelsBlock.store(false, std::memory_order_relaxed);
-
-                        const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
-                        PerformAction(modifierHeld ? rightPowerAttackAction : rightAttackAction, player);
-                        return;
-                    }
-
                     const bool blockKeyHeld = blockHeld.load(std::memory_order_relaxed);
                     rightAttackUsesVanilla.store(cfg.eldenCounterMode ? blockKeyHeld : player->IsBlocking(), std::memory_order_relaxed);
                     rightAttackCancelsBlock.store(cfg.eldenCounterMode && !blockKeyHeld, std::memory_order_relaxed);
+
+                    // Modifier mode uses the same vanilla block/bash route as hold mode.
+                    // Only take over the press when the normal attack route is selected.
+                    const bool useVanilla = rightAttackUsesVanilla.load(std::memory_order_relaxed);
+                    const bool useModifierMode = cfg.modifierRightMode && !useVanilla;
+                    rightAttackUsesModifierMode.store(useModifierMode, std::memory_order_relaxed);
+                    if (useModifierMode) {
+                        const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
+                        PerformAction(modifierHeld ? rightPowerAttackAction : rightAttackAction, player,
+                            rightAttackCancelsBlock.load(std::memory_order_relaxed));
+                    }
                 }
 
-                // Modifier-right mode chooses an action on button-down and owns the input through release.
+                // Modifier-right mode chooses an action on button-down and owns the custom
+                // attack input through release. Vanilla block/bash routes pass through below.
                 if (rightAttackUsesModifierMode.load(std::memory_order_relaxed)) {
                     if (a_event->IsUp()) {
                         rightAttackUsesModifierMode.store(false, std::memory_order_relaxed);

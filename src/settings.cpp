@@ -226,7 +226,7 @@ namespace settings {
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
         changed |= ImGuiMCP::Checkbox("Bashing requires block key to be held", &cfg.eldenCounterMode);
 
-        changed |= ImGuiMCP::Checkbox("Use modifier + RightAttack", &cfg.modifierRightMode);
+        changed |= ImGuiMCP::Checkbox("Use modifier + RightAttack instead", &cfg.modifierRightMode);
 
         std::string modifierKeyName = "Unbound";
         if (cfg.modifierKey >= 0) {
