@@ -167,13 +167,13 @@ namespace utils {
             activeAttackData.reset(selectedAttackData);
         }
 
-        SKSE::log::info(
-            "forceUpdateAttackData {} '{}': powerAttack={}, staminaMult={}, damageMult={}",
-            attackDataChanged ? "reapplied" : "already active",
-            attackDataString.c_str(),
-            selectedAttackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack),
-            selectedAttackData->data.staminaMult,
-            selectedAttackData->data.damageMult);
+        // SKSE::log::info(
+        //     "forceUpdateAttackData {} '{}': powerAttack={}, staminaMult={}, damageMult={}",
+        //     attackDataChanged ? "reapplied" : "already active",
+        //     attackDataString.c_str(),
+        //     selectedAttackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack),
+        //     selectedAttackData->data.staminaMult,
+        //     selectedAttackData->data.damageMult);
         return true;
     }
 }

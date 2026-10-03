@@ -30,6 +30,15 @@ namespace settings {
         std::atomic_bool waitingForCaptureRelease = false;
         SKSEMenuFramework::Model::InputEvent* bindingMenuInputEvent = nullptr;
 
+        std::string GetKeyDisplayName(const int keyCode) {
+            if (keyCode < 0) {
+                return "Unbound";
+            }
+
+            auto name = SKSE::InputMap::GetKeyName(static_cast<std::uint32_t>(keyCode));
+            return name.empty() ? "Unknown (" + std::to_string(keyCode) + ")" : name;
+        }
+
         void SetKeyFromInput(const BindingTarget target, const int keyCode) {
             {
                 std::scoped_lock lock(configMutex);
@@ -295,8 +304,8 @@ namespace settings {
 
         const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
        
-        const std::string altBlockKeyName = cfg.altBlockKey < 0 ? "Unbound" : std::to_string(cfg.altBlockKey);
-        ImGuiMCP::Text("Alt Block Key Code: %s", altBlockKeyName.c_str());
+        const std::string altBlockKeyName = GetKeyDisplayName(cfg.altBlockKey);
+        ImGuiMCP::Text("Alt Block Key: %s", altBlockKeyName.c_str());
         if (activeCapture == BindingTarget::altBlock) {
             ImGuiMCP::TextUnformatted("Listening for alt block key (ESC unbinds)");
         } else if (activeCapture == BindingTarget::none) {
@@ -312,8 +321,8 @@ namespace settings {
             }
         }
 
-        const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
-        ImGuiMCP::Text("Modifier Key Code: %s", modifierKeyName.c_str());
+        const std::string modifierKeyName = GetKeyDisplayName(cfg.modifierKey);
+        ImGuiMCP::Text("Modifier Key: %s", modifierKeyName.c_str());
         if (activeCapture == BindingTarget::modifier) {
             ImGuiMCP::TextUnformatted("Listening for modifier key (ESC unbinds)");
         } else if (activeCapture == BindingTarget::none) {
@@ -329,8 +338,8 @@ namespace settings {
             }
         }
 
-        const std::string altPowerKeyName = cfg.altPowerKey < 0 ? "Unbound" : std::to_string(cfg.altPowerKey);
-        ImGuiMCP::Text("Alt Power Attack Key Code: %s", altPowerKeyName.c_str());
+        const std::string altPowerKeyName = GetKeyDisplayName(cfg.altPowerKey);
+        ImGuiMCP::Text("Alt Power Attack Key: %s", altPowerKeyName.c_str());
         if (activeCapture == BindingTarget::altPowerKey) {
             ImGuiMCP::TextUnformatted("Listening for alt power key (ESC unbinds)");
         } else if (activeCapture == BindingTarget::none) {
