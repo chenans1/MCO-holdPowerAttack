@@ -23,11 +23,13 @@ namespace settings {
         setting_definition<bool>{ "log", &settings::config::log },
         setting_definition<float>{ "HoldDuration", &settings::config::HoldDuration },
         setting_definition<bool>{ "eldenCounterMode", &settings::config::eldenCounterMode },
-
+        setting_definition<int>{ "modifierKey", &settings::config::modifierKey },
+        setting_definition<bool>{ "modifierRightMode", &settings::config::modifierRightMode },
     };
 
     config Get();
     void Set(const config& value);
+    void SetModifierKeyFromInput(int keyCode);
     void Load();
     bool Save();
 

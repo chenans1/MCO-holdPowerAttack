@@ -14,6 +14,8 @@ class hooks {
     static inline ProcessButton_t _ProcessButton = nullptr;
 
     public:
+        static inline std::atomic_bool modifierPressed = false;
+
         static inline RE::BGSAction* rightAttackAction = nullptr;
         static inline RE::BGSAction* rightPowerAttackAction = nullptr;
 
@@ -30,13 +32,21 @@ class hooks {
             rightAttackAction = RE::TESForm::LookupByID<RE::BGSAction>(0x13005);
             rightPowerAttackAction = RE::TESForm::LookupByID<RE::BGSAction>(0x13383);
 
-            if (!rightPowerAttackAction) {
+            if (!rightAttackAction || !rightPowerAttackAction) {
                 SKSE::log::error("Failed to BGSAction Forms: rightAttackAction={}, rightPowerAttackAction={}", 
                     static_cast<void*>(rightAttackAction), static_cast<void*>(rightPowerAttackAction));
                 return false;
             }
             SKSE::log::info("Correctly loaded rightAttackAction={:08X} rightPowerAttackAction={:08X}",
                 rightAttackAction->GetFormID(), rightPowerAttackAction->GetFormID());
+
+            auto* inputMgr = RE::BSInputDeviceManager::GetSingleton();
+            if (!inputMgr) {
+                SKSE::log::warn("BSInputDeviceManager not available; modifier key input will not work");
+            } else {
+                inputMgr->AddEventSink(&modifierInputSink);
+                SKSE::log::info("Modifier key input sink registered");
+            }
             return true;
         }
 
@@ -45,6 +55,44 @@ class hooks {
         static inline std::atomic_bool blockHeld = false;
         static inline std::atomic_bool rightAttackUsesVanilla = false;
         static inline std::atomic_bool rightAttackCancelsBlock = false;
+        static inline std::atomic_bool rightAttackUsesModifierMode = false;
+        static inline std::atomic_int trackedModifierKey = -2;
+        static inline std::atomic_bool bindModifierKey = false;
+
+        class ModifierInputSink final : public RE::BSTEventSink<RE::InputEvent*> {
+        public:
+            RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_events, RE::BSTEventSource<RE::InputEvent*>*) override {
+                if (!a_events) {
+                    return RE::BSEventNotifyControl::kContinue;
+                }
+
+                auto cfg = settings::Get();
+                const int modifierKey = cfg.modifierKey;
+                if (trackedModifierKey.exchange(modifierKey, std::memory_order_relaxed) != modifierKey) {
+                    modifierPressed.store(false, std::memory_order_relaxed);
+                }
+
+                for (auto ev = *a_events; ev != nullptr; ev = ev->next) {
+                    auto* btn = ev->AsButtonEvent();
+                    if (!btn) continue;
+
+                    const int keyCode = utils::toKeyCode(*btn);
+
+                    if (modifierKey > 0 && modifierKey == keyCode) {
+                        if (btn->IsPressed()) {
+                            modifierPressed.store(true, std::memory_order_relaxed);
+                        } else if (btn->IsUp()) {
+                            modifierPressed.store(false, std::memory_order_relaxed);
+                        }
+                        
+                    }
+                }
+
+                return RE::BSEventNotifyControl::kContinue;
+            }
+        };
+
+        static inline ModifierInputSink modifierInputSink{};
         
         static bool PerformAction(RE::BGSAction* action, RE::Actor* actor, bool cancelBlock = false) {
             if (!action || !actor) return false;
@@ -78,14 +126,39 @@ class hooks {
             }
             auto cfg = settings::Get();
             if (!utils::isRightMelee(player)) return _ProcessButton(a_this, a_event, a_data);
-
+            if (a_event->QUserEvent() == userEvents->leftAttack) {
+                if (a_event->IsUp()) {
+                    blockHeld.store(false, std::memory_order_relaxed);
+                } else if (a_event->IsPressed()) {
+                    blockHeld.store(true, std::memory_order_relaxed);
+                }
+                return _ProcessButton(a_this, a_event, a_data);
+            }
             // Defer short inputs until release; issue a power attack once the hold threshold is reached.
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {
                     alreadyPerformed.store(false, std::memory_order_relaxed);
+                    rightAttackUsesModifierMode.store(cfg.modifierRightMode, std::memory_order_relaxed);
+                    if (cfg.modifierRightMode) {
+                        rightAttackUsesVanilla.store(false, std::memory_order_relaxed);
+                        rightAttackCancelsBlock.store(false, std::memory_order_relaxed);
+
+                        const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
+                        PerformAction(modifierHeld ? rightPowerAttackAction : rightAttackAction, player);
+                        return;
+                    }
+
                     const bool blockKeyHeld = blockHeld.load(std::memory_order_relaxed);
                     rightAttackUsesVanilla.store(cfg.eldenCounterMode ? blockKeyHeld : player->IsBlocking(), std::memory_order_relaxed);
                     rightAttackCancelsBlock.store(cfg.eldenCounterMode && !blockKeyHeld, std::memory_order_relaxed);
+                }
+
+                // Modifier-right mode chooses an action on button-down and owns the input through release.
+                if (rightAttackUsesModifierMode.load(std::memory_order_relaxed)) {
+                    if (a_event->IsUp()) {
+                        rightAttackUsesModifierMode.store(false, std::memory_order_relaxed);
+                    }
+                    return;
                 }
 
                 // Keep the route selected on button-down until this input is released.
@@ -120,16 +193,10 @@ class hooks {
                     }
                 }
                 return;
-            } else if (a_event->QUserEvent() == userEvents->leftAttack) {
-                if (a_event->IsUp()) {
-                    blockHeld.store(false, std::memory_order_relaxed);
-                } else if (a_event->IsPressed()) {
-                    blockHeld.store(true, std::memory_order_relaxed);
-                }
-                return _ProcessButton(a_this, a_event, a_data);
             }
 
             return _ProcessButton(a_this, a_event, a_data);
         }
-        // inline static REL::Relocation<decltype(ProcessButtonHook)> _ProcessButton;
+
+        // Modifier-key input tracking is handled by ModifierInputSink.
 };
