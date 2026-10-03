@@ -361,6 +361,7 @@ namespace settings {
         changed |= ImGuiMCP::Combo("Modifier + Left Attack Mode", &cfg.modifierModeLeftPA, modifierLeftAttackModes, 5);
         ImGuiMCP::BeginDisabled(cfg.modifierModeLeftPA != 0);
         changed |= ImGuiMCP::Combo("Left Attack Movement Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
+        changed |= ImGuiMCP::Checkbox("Treat Forward Movement as Neutral", &cfg.includeFWD);
         ImGuiMCP::EndDisabled();
         ImGuiMCP::EndDisabled();
 

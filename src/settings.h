@@ -25,7 +25,7 @@ namespace settings {
         // 3 movement for left spell/staff cast only. Block, stationary is power attack
         int defaultBehaviorMode = 0;
         //for: isNeutral also accepts forward vec
-        bool excludeFWD = false;
+        bool includeFWD = false;
         // 0 - disabled.
         // 1 - Mod+Left = PA | Left = Cast/Block
         // 2 - Mod+Left = PA | Left = Cast/PA
@@ -55,6 +55,7 @@ namespace settings {
         setting_definition<bool>{ "leftAttackPA", &settings::config::leftAttackPA },
         setting_definition<int>{ "defaultBehaviorMode", &settings::config::defaultBehaviorMode },
         setting_definition<int>{ "modifierModeLeftPA", &settings::config::modifierModeLeftPA },
+        setting_definition<bool>{ "includeFWD", &settings::config::includeFWD },
     };
 
     config Get();
