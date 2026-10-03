@@ -19,7 +19,8 @@ class hooks {
 
     public:
         static inline std::atomic_bool modifierPressed = false;
-        static inline std::atomic_bool cancelBlockKeyPressed = false;
+        static inline std::atomic_bool leftBlockKeyPressed = false;
+        static inline std::atomic_bool altBlockKeyPressed = false;
 
         static inline RE::BGSAction* rightAttackAction = nullptr;
         static inline RE::BGSAction* rightPowerAttackAction = nullptr;
@@ -80,13 +81,13 @@ class hooks {
 
                 auto cfg = settings::Get();
                 const int modifierKey = cfg.modifierKey;
-                const int cancelBlockKey = cfg.cancelBlockKey;
+                const int altBlockKey = cfg.altBlockKey;
                 const int altPowerKey = cfg.altPowerKey;
                 if (modifierKey < 0) {
                     modifierPressed.store(false, std::memory_order_relaxed);
                 }
-                if (cancelBlockKey < 0) {
-                    cancelBlockKeyPressed.store(false, std::memory_order_relaxed);
+                if (altBlockKey < 0) {
+                    altBlockKeyPressed.store(false, std::memory_order_relaxed);
                 }
 
                 for (auto ev = *a_events; ev != nullptr; ev = ev->next) {
@@ -103,18 +104,23 @@ class hooks {
                         }
                     }
 
-                    if (cancelBlockKey > 0 && cancelBlockKey == keyCode) {
+                    if (altBlockKey > 0 && altBlockKey == keyCode) {
                         if (btn->IsPressed()) {
-                            cancelBlockKeyPressed.store(true, std::memory_order_relaxed);
+                            altBlockKeyPressed.store(true, std::memory_order_relaxed);
                         } else if (btn->IsUp()) {
-                            cancelBlockKeyPressed.store(false, std::memory_order_relaxed);
+                            altBlockKeyPressed.store(false, std::memory_order_relaxed);
                         }
                     }
 
                     if (cfg.currentMode == 2 && altPowerKey > 0 && altPowerKey == keyCode && btn->IsPressed()) {
                         const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
                         if (!cfg.useModifierAltPA || modifierHeld) {
-                            PerformAction(rightPowerAttackAction, RE::PlayerCharacter::GetSingleton(), cfg.eldenCounterMode);
+                            auto* player = RE::PlayerCharacter::GetSingleton();
+                            const bool blockInputHeld =
+                                leftBlockKeyPressed.load(std::memory_order_relaxed) ||
+                                altBlockKeyPressed.load(std::memory_order_relaxed);
+                            const bool cancelBlock = cfg.eldenCounterMode && player && player->IsBlocking() && !blockInputHeld;
+                            PerformAction(rightPowerAttackAction, player, cancelBlock);
                         }
                     }
                 }
@@ -192,6 +198,13 @@ class hooks {
             }
             auto cfg = settings::Get();
             if (!utils::isRightMelee(player)) return _ProcessButton(a_this, a_event, a_data);
+            if (a_event->QUserEvent() == userEvents->leftAttack) {
+                if (a_event->IsDown()) {
+                    leftBlockKeyPressed.store(true, std::memory_order_relaxed);
+                } else if (a_event->IsUp()) {
+                    leftBlockKeyPressed.store(false, std::memory_order_relaxed);
+                }
+            }
             // Choose the left-input behavior on the initial press and keep it
             // fixed through release. Vanilla handling retains cast and block/bash behavior.
             if (a_event->QUserEvent() == userEvents->leftAttack) {
@@ -267,26 +280,15 @@ class hooks {
                     rightAttackHeld.store(true, std::memory_order_relaxed);
                     holdRepeatArmed.store(false, std::memory_order_relaxed);
                     alreadyPerformed.store(false, std::memory_order_relaxed);
-                    /*
-                    bool cancelBlock = false;
-                    if (cfg.eldenCounterMode && player->IsBlocking()) {
-                        switch (cfg.movementCancelMode) {
-                            case 1:
-                                cancelBlock = utils::isNeutral();
-                                break;
-                            case 2:
-                                cancelBlock = !utils::isNeutral();
-                                break;
-                            default:
-                                cancelBlock = cancelBlockKeyPressed.load(std::memory_order_relaxed);
-                                break;
-                        }
-                    }
-                    */
-                    // Hold and modifier-right modes use vanilla bash behavior while blocking.
-                    // Block-cancel attacks are reserved for the alternative power key for now.
-                    rightAttackUsesVanilla.store(player->IsBlocking(), std::memory_order_relaxed);
-                    rightAttackCancelsBlock.store(false, std::memory_order_relaxed);
+                    const bool blocking = player->IsBlocking();
+                    const bool blockInputHeld =
+                        leftBlockKeyPressed.load(std::memory_order_relaxed) ||
+                        altBlockKeyPressed.load(std::memory_order_relaxed);
+                    const bool cancelBlock = cfg.eldenCounterMode && blocking && !blockInputHeld;
+                    // While blocking, either held block key keeps the vanilla bash route.
+                    // With Elden Counter enabled and neither held, route to attack/PA instead.
+                    rightAttackUsesVanilla.store(blocking && !cancelBlock, std::memory_order_relaxed);
+                    rightAttackCancelsBlock.store(cancelBlock, std::memory_order_relaxed);
 
                     // Modifier mode uses the same vanilla block/bash route as hold mode.
                     // Only take over the press when the normal attack route is selected.

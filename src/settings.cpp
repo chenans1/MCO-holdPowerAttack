@@ -25,7 +25,7 @@ namespace settings {
     std::atomic_bool unsavedChanges = false;
 
     namespace {
-        enum class BindingTarget : std::uint8_t { none, modifier, cancelBlock, altPowerKey };
+        enum class BindingTarget : std::uint8_t { none, modifier, altBlock, altPowerKey };
         std::atomic<BindingTarget> captureTarget = BindingTarget::none;
         std::atomic_bool waitingForCaptureRelease = false;
         SKSEMenuFramework::Model::InputEvent* bindingMenuInputEvent = nullptr;
@@ -37,8 +37,8 @@ namespace settings {
                 case BindingTarget::modifier:
                     activeConfig.modifierKey = keyCode;
                     break;
-                case BindingTarget::cancelBlock:
-                    activeConfig.cancelBlockKey = keyCode;
+                case BindingTarget::altBlock:
+                    activeConfig.altBlockKey = keyCode;
                     break;
                 case BindingTarget::altPowerKey:
                     activeConfig.altPowerKey = keyCode;
@@ -197,6 +197,11 @@ namespace settings {
             loadSetting(ini, loaded, definition);
         });
 
+        // Accept the previous INI key name for existing installations.
+        if (!ini.GetValue(general, "altBlockKey", nullptr)) {
+            loaded.altBlockKey = static_cast<int>(ini.GetLongValue(general, "cancelBlockKey", loaded.altBlockKey));
+        }
+
         // Migrate configs written before currentMode replaced the three base-mode booleans.
         if (!ini.GetValue(general, "currentMode", nullptr)) {
             if (ini.GetBoolValue(general, "leftAttackPA", false)) {
@@ -259,7 +264,7 @@ namespace settings {
     void __stdcall RenderMenuPage() {
         auto cfg = Get();
         bool changed = false;
-        // changed |= ImGuiMCP::Checkbox("Attacks can cancel Block", &cfg.eldenCounterMode);
+        changed |= ImGuiMCP::Checkbox("Bashing requires block or alt block key held", &cfg.eldenCounterMode);
 
         static constexpr const char* attackInputModes[] = {
             "Hold RightAttack",
@@ -287,39 +292,25 @@ namespace settings {
             changed |= ImGuiMCP::Combo("Hold Mode", &cfg.holdMode, holdModes, 2);
         }
 
-        // static constexpr const char* movementCancelModes[] = {
-        //     "Disabled",
-        //     "When stationary",
-        //     "When moving"
-        // };
-        // if (cfg.movementCancelMode < 0 || cfg.movementCancelMode >= 3) {
-        //     cfg.movementCancelMode = 0;
-        //     changed = true;
-        // }
-        // ImGuiMCP::BeginDisabled(!cfg.eldenCounterMode);
-        // changed |= ImGuiMCP::Combo("Movement Cancel Mode", &cfg.movementCancelMode, movementCancelModes, 3);
-        // ImGuiMCP::EndDisabled();
 
         const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
        
-        // const std::string cancelBlockKeyName = cfg.cancelBlockKey < 0 ? "Unbound" : std::to_string(cfg.cancelBlockKey);
-        // ImGuiMCP::Text("Cancel Block Key Code: %s", cancelBlockKeyName.c_str());
-        // if (activeCapture == BindingTarget::cancelBlock) {
-        //     ImGuiMCP::TextUnformatted("Listening for cancel block key (ESC unbinds)");
-        // } else {
-        //     if (activeCapture == BindingTarget::none) {
-        //         if (ImGuiMCP::Button("Bind Cancel Block Key")) {
-        //             StartBindingCapture(BindingTarget::cancelBlock);
-        //         }
-        //         ImGuiMCP::SameLine();
-        //         if (ImGuiMCP::Button("Unbind Cancel Block Key")) {
-        //             cfg.cancelBlockKey = -1;
-        //             SetKeyFromInput(BindingTarget::cancelBlock, -1);
-        //             Set(cfg);
-        //             changed = true;
-        //         }
-        //     }
-        // }
+        const std::string altBlockKeyName = cfg.altBlockKey < 0 ? "Unbound" : std::to_string(cfg.altBlockKey);
+        ImGuiMCP::Text("Alt Block Key Code: %s", altBlockKeyName.c_str());
+        if (activeCapture == BindingTarget::altBlock) {
+            ImGuiMCP::TextUnformatted("Listening for alt block key (ESC unbinds)");
+        } else if (activeCapture == BindingTarget::none) {
+            if (ImGuiMCP::Button("Bind Alt Block Key")) {
+                StartBindingCapture(BindingTarget::altBlock);
+            }
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Unbind Alt Block Key")) {
+                cfg.altBlockKey = -1;
+                SetKeyFromInput(BindingTarget::altBlock, -1);
+                Set(cfg);
+                changed = true;
+            }
+        }
 
         const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
         ImGuiMCP::Text("Modifier Key Code: %s", modifierKeyName.c_str());

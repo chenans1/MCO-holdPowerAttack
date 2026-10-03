@@ -9,9 +9,9 @@ namespace settings {
         float HoldDuration = 0.18f;
         // 0 - disabled, 1 - repeat power attacks. window resets on MCO/BFCO_WinOpen
         int holdMode = 0;
-        bool eldenCounterMode = false; //while blocking, cancel block for an attack only when cancelBlockKey is held.
+        bool eldenCounterMode = false;
         int modifierKey = -1;
-        int cancelBlockKey = -1; //if pressed and elden counter mode is enabled, the right attack input will cancel the block and do attack/power attack.
+        int altBlockKey = -1;
 
         int movementCancelMode = 0; //0 means disabled, 1 means if stationary (cancel block), 2 means if not stationary (cancel block).
 
@@ -44,9 +44,9 @@ namespace settings {
         setting_definition<int>{ "currentMode", &settings::config::currentMode },
         setting_definition<float>{ "HoldDuration", &settings::config::HoldDuration },
         setting_definition<int>{ "holdMode", &settings::config::holdMode },
-        // setting_definition<bool>{ "eldenCounterMode", &settings::config::eldenCounterMode },
+        setting_definition<bool>{ "eldenCounterMode", &settings::config::eldenCounterMode },
         setting_definition<int>{ "modifierKey", &settings::config::modifierKey },
-        // setting_definition<int>{ "cancelBlockKey", &settings::config::cancelBlockKey },
+        setting_definition<int>{ "altBlockKey", &settings::config::altBlockKey },
         setting_definition<int>{ "movementCancelMode", &settings::config::movementCancelMode },
 
         setting_definition<int>{ "altPowerKey", &settings::config::altPowerKey },
