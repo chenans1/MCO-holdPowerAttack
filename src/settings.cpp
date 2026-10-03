@@ -299,6 +299,39 @@ namespace settings {
                 changed = true;
             }
             changed |= ImGuiMCP::Combo("Hold Mode", &cfg.holdMode, holdModes, 2);
+        } else if (cfg.currentMode == 2) {
+            changed |= ImGuiMCP::Checkbox("Require Modifier for Alt Power Key", &cfg.useModifierAltPA);
+        } else if (cfg.currentMode == 3) {
+            ImGuiMCP::TextUnformatted("Left Attack Power Attack Settings");
+
+            static constexpr const char* leftAttackModes[] = {
+                "Moving: power attack; stationary: default block/cast",
+                "Stationary: power attack; moving: default block/cast",
+                "Spell: cast stationary, power attack moving; other: power attack",
+                "Spell: cast moving, power attack stationary; other: power attack"
+            };
+            static constexpr const char* modifierLeftAttackModes[] = {
+                "Disabled",
+                "Mod+Left: PA; Left: cast/block",
+                "Mod+Left: PA; Left: cast/PA",
+                "Mod+Left: cast/block; Left: PA",
+                "Mod+Left: cast/PA; Left: PA"
+            };
+
+            if (cfg.defaultBehaviorMode < 0 || cfg.defaultBehaviorMode >= 4) {
+                cfg.defaultBehaviorMode = 0;
+                changed = true;
+            }
+            if (cfg.modifierModeLeftPA < 0 || cfg.modifierModeLeftPA >= 5) {
+                cfg.modifierModeLeftPA = 0;
+                changed = true;
+            }
+
+            changed |= ImGuiMCP::Combo("Modifier + Left Attack Mode", &cfg.modifierModeLeftPA, modifierLeftAttackModes, 5);
+            ImGuiMCP::BeginDisabled(cfg.modifierModeLeftPA != 0);
+            changed |= ImGuiMCP::Combo("Left Attack Movement Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
+            changed |= ImGuiMCP::Checkbox("Treat Forward Movement as Neutral", &cfg.includeFWD);
+            ImGuiMCP::EndDisabled();
         }
 
 
@@ -355,40 +388,6 @@ namespace settings {
             }
         }
 
-        ImGuiMCP::BeginDisabled(cfg.currentMode != 2);
-        changed |= ImGuiMCP::Checkbox("Require Modifier for Alt Power Key", &cfg.useModifierAltPA);
-        ImGuiMCP::EndDisabled();
-
-        static constexpr const char* leftAttackModes[] = {
-            "Moving: power attack; stationary: default block/cast",
-            "Stationary: power attack; moving: default block/cast",
-            "Spell: cast stationary, power attack moving; other: power attack",
-            "Spell: cast moving, power attack stationary; other: power attack"
-        };
-        if (cfg.defaultBehaviorMode < 0 || cfg.defaultBehaviorMode >= 4) {
-            cfg.defaultBehaviorMode = 0;
-            changed = true;
-        }
-        static constexpr const char* modifierLeftAttackModes[] = {
-            "Disabled",
-            "Mod+Left: PA; Left: cast/block",
-            "Mod+Left: PA; Left: cast/PA",
-            "Mod+Left: cast/block; Left: PA",
-            "Mod+Left: cast/PA; Left: PA"
-        };
-        if (cfg.modifierModeLeftPA < 0 || cfg.modifierModeLeftPA >= 5) {
-            cfg.modifierModeLeftPA = 0;
-            changed = true;
-        }
-        ImGuiMCP::BeginDisabled(cfg.currentMode != 3);
-        changed |= ImGuiMCP::Combo("Modifier + Left Attack Mode", &cfg.modifierModeLeftPA, modifierLeftAttackModes, 5);
-        ImGuiMCP::BeginDisabled(cfg.modifierModeLeftPA != 0);
-        changed |= ImGuiMCP::Combo("Left Attack Movement Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
-        changed |= ImGuiMCP::Checkbox("Treat Forward Movement as Neutral", &cfg.includeFWD);
-        ImGuiMCP::EndDisabled();
-        ImGuiMCP::EndDisabled();
-
-        
         changed |= ImGuiMCP::Checkbox("Enable Log", &cfg.log);
         if (changed) {
             Set(cfg);
