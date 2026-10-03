@@ -20,6 +20,7 @@ namespace settings {
 
     std::mutex configMutex;
     config activeConfig{};
+    std::atomic_bool baseHoldRepeatEnabled{ false };
 
     std::atomic_bool unsavedChanges = false;
 
@@ -160,9 +161,16 @@ namespace settings {
         return activeConfig;
     }
 
+    bool IsBaseHoldRepeatEnabled() {
+        return baseHoldRepeatEnabled.load(std::memory_order_relaxed);
+    }
+
     void Set(const config& value) {
         std::scoped_lock lock(configMutex);
         activeConfig = value;
+        baseHoldRepeatEnabled.store(
+            value.holdMode == 1 && value.currentMode == 0,
+            std::memory_order_relaxed);
     }
 
     void Load() {
@@ -188,6 +196,20 @@ namespace settings {
         forEachSetting([&ini, &loaded](const auto& definition) {
             loadSetting(ini, loaded, definition);
         });
+
+        // Migrate configs written before currentMode replaced the three base-mode booleans.
+        if (!ini.GetValue(general, "currentMode", nullptr)) {
+            if (ini.GetBoolValue(general, "leftAttackPA", false)) {
+                loaded.currentMode = 3;
+            } else if (ini.GetBoolValue(general, "useAltPowerKeyBind", false)) {
+                loaded.currentMode = 2;
+            } else if (ini.GetBoolValue(general, "modifierRightMode", false)) {
+                loaded.currentMode = 1;
+            }
+        }
+        if (loaded.currentMode < 0 || loaded.currentMode > 3) {
+            loaded.currentMode = 0;
+        }
 
         Set(loaded);
         SKSE::log::info("[settings] Loaded {}", iniPath);
@@ -237,31 +259,32 @@ namespace settings {
     void __stdcall RenderMenuPage() {
         auto cfg = Get();
         bool changed = false;
-        changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
         // changed |= ImGuiMCP::Checkbox("Attacks can cancel Block", &cfg.eldenCounterMode);
 
         static constexpr const char* attackInputModes[] = {
             "Hold RightAttack",
-            "Alt Power Key",
             "Modifier + RightAttack",
+            "Alt Power Key",
             "Left Attack Power Attack"
         };
-        
-        int attackInputMode = cfg.leftAttackPA ? 3 : (cfg.useAltPowerKeyBind ? 1 : (cfg.modifierRightMode ? 2 : 0));
-        const bool normalizedAltMode = attackInputMode == 1;
-        const bool normalizedModifierMode = attackInputMode == 2;
-        const bool normalizedLeftAttackMode = attackInputMode == 3;
-        if (cfg.useAltPowerKeyBind != normalizedAltMode || cfg.modifierRightMode != normalizedModifierMode || cfg.leftAttackPA != normalizedLeftAttackMode) {
-            cfg.useAltPowerKeyBind = normalizedAltMode;
-            cfg.modifierRightMode = normalizedModifierMode;
-            cfg.leftAttackPA = normalizedLeftAttackMode;
+        if (cfg.currentMode < 0 || cfg.currentMode > 3) {
+            cfg.currentMode = 0;
             changed = true;
         }
-        if (ImGuiMCP::Combo("Power Attack Input Mode", &attackInputMode, attackInputModes, 4)) {
-            cfg.useAltPowerKeyBind = attackInputMode == 1;
-            cfg.modifierRightMode = attackInputMode == 2;
-            cfg.leftAttackPA = attackInputMode == 3;
-            changed = true;
+        changed |= ImGuiMCP::Combo("Power Attack Input Mode", &cfg.currentMode, attackInputModes, 4);
+
+        if (cfg.currentMode == 0) {
+            changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
+
+            static constexpr const char* holdModes[] = {
+                "No Repeats",
+                "Repeat Power Attacks"
+            };
+            if (cfg.holdMode < 0 || cfg.holdMode >= 2) {
+                cfg.holdMode = 0;
+                changed = true;
+            }
+            changed |= ImGuiMCP::Combo("Hold Mode", &cfg.holdMode, holdModes, 2);
         }
 
         // static constexpr const char* movementCancelModes[] = {
@@ -332,7 +355,7 @@ namespace settings {
             }
         }
 
-        ImGuiMCP::BeginDisabled(!cfg.useAltPowerKeyBind);
+        ImGuiMCP::BeginDisabled(cfg.currentMode != 2);
         changed |= ImGuiMCP::Checkbox("Require Modifier for Alt Power Key", &cfg.useModifierAltPA);
         ImGuiMCP::EndDisabled();
 
@@ -357,7 +380,7 @@ namespace settings {
             cfg.modifierModeLeftPA = 0;
             changed = true;
         }
-        ImGuiMCP::BeginDisabled(!cfg.leftAttackPA);
+        ImGuiMCP::BeginDisabled(cfg.currentMode != 3);
         changed |= ImGuiMCP::Combo("Modifier + Left Attack Mode", &cfg.modifierModeLeftPA, modifierLeftAttackModes, 5);
         ImGuiMCP::BeginDisabled(cfg.modifierModeLeftPA != 0);
         changed |= ImGuiMCP::Combo("Left Attack Movement Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);

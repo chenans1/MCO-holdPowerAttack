@@ -5,9 +5,11 @@
 
 #include <CLibUtilsQTR/Tasker.hpp>
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 
 class hooks {
@@ -28,6 +30,11 @@ class hooks {
             const std::uintptr_t original = vtbl.write_vfunc(0x4, &ProcessButtonHook);
             _ProcessButton = reinterpret_cast<ProcessButton_t>(original);
             SKSE::log::info("AttackBlockHandler::ProcessButton Hooked.");
+
+
+            REL::Relocation<std::uintptr_t> vtblPC{RE::VTABLE_PlayerCharacter[2]};
+
+            _originalPC = vtblPC.write_vfunc(0x1, ProcessEvent_PC);
             SKSE::log::info("Finished Installing Hooks.");
         }
 
@@ -55,6 +62,9 @@ class hooks {
 
     private:
         static inline std::atomic_bool alreadyPerformed = false;
+        static inline std::atomic_bool rightAttackHeld = false;
+        static inline std::atomic_bool holdRepeatArmed = false;
+        static inline std::atomic_bool holdRepeatActionQueued = false;
         static inline std::atomic_bool rightAttackUsesVanilla = false;
         static inline std::atomic_bool rightAttackCancelsBlock = false;
         static inline std::atomic_bool rightAttackUsesModifierMode = false;
@@ -103,7 +113,7 @@ class hooks {
                         }
                     }
 
-                    if (cfg.useAltPowerKeyBind && altPowerKey > 0 && altPowerKey == keyCode && btn->IsPressed()) {
+                    if (cfg.currentMode == 2 && altPowerKey > 0 && altPowerKey == keyCode && btn->IsPressed()) {
                         const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
                         if (!cfg.useModifierAltPA || modifierHeld) {
                             PerformAction(rightPowerAttackAction, RE::PlayerCharacter::GetSingleton(), cfg.eldenCounterMode);
@@ -145,14 +155,11 @@ class hooks {
         //     return processed;
         // }
 
-        static bool PerformAction(RE::BGSAction* action, RE::Actor* actor, bool cancelBlock = false) {
+        static bool PerformAction(RE::BGSAction* action, RE::Actor* actor, bool cancelBlock = false, std::function<void()> onComplete = {}) {
             if (!action || !actor) return false;
 
             if (auto taskInterface = SKSE::GetTaskInterface()) {
-                // actor->AsActorState()->actorState1.meleeAttackState = RE::ATTACK_STATE_ENUM::kHit;
-                // RE::ATTACK_STATE_ENUM currentState = (actor->AsActorState()->actorState1.meleeAttackState);
-                // SKSE::log::info("Before currentState = {}",  static_cast<std::uint32_t>(currentState));
-                taskInterface->AddTask([action, actor, cancelBlock](){
+                taskInterface->AddTask([action, actor, cancelBlock, onComplete = std::move(onComplete)]() mutable {
                     //off hand key must be held
                     if (cancelBlock) {
                         if (actor->IsBlocking()) {
@@ -169,17 +176,10 @@ class hooks {
                     using ProcessAction_t = bool (*)(RE::TESActionData*);
                     REL::Relocation<ProcessAction_t> processAction{ RELOCATION_ID(40551, 41557) };
                     processAction(data.get());
-                    // const bool isPowerAttack = action == rightPowerAttackAction;
-                    // utils::forceUpdateAttackData(isPowerAttack);
-                    // RE::ATTACK_STATE_ENUM currentState2 = (actor->AsActorState()->actorState1.meleeAttackState);
-                    // SKSE::log::info("after state = {}",  static_cast<std::uint32_t>(currentState2));
+                    if (onComplete) {
+                        onComplete();
+                    }
                 });
-
-                // const bool isPowerAttack = action == rightPowerAttackAction;
-                // utils::forceUpdateAttackData(isPowerAttack);
-                // RE::ATTACK_STATE_ENUM currentState2 = (actor->AsActorState()->actorState1.meleeAttackState);
-                // SKSE::log::info("after state = {}",  static_cast<std::uint32_t>(currentState2));
-                
                 return true;
             }
             return false;
@@ -199,7 +199,7 @@ class hooks {
             if (a_event->QUserEvent() == userEvents->leftAttack) {
                 if (a_event->IsDown()) {
                     bool usePowerAttack = false;
-                    if (cfg.leftAttackPA) {
+                    if (cfg.currentMode == 3) {
                         const bool leftSpell = utils::isLeftSpell(player);
                         const bool stationary = utils::isNeutral();
                         const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
@@ -266,6 +266,8 @@ class hooks {
             // Defer short inputs until release; issue a power attack once the hold threshold is reached.
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {
+                    rightAttackHeld.store(true, std::memory_order_relaxed);
+                    holdRepeatArmed.store(false, std::memory_order_relaxed);
                     alreadyPerformed.store(false, std::memory_order_relaxed);
                     /*
                     bool cancelBlock = false;
@@ -291,12 +293,17 @@ class hooks {
                     // Modifier mode uses the same vanilla block/bash route as hold mode.
                     // Only take over the press when the normal attack route is selected.
                     const bool useVanilla = rightAttackUsesVanilla.load(std::memory_order_relaxed);
-                    const bool useModifierMode = cfg.modifierRightMode && !useVanilla;
+                    const bool useModifierMode = cfg.currentMode == 1 && !useVanilla;
                     rightAttackUsesModifierMode.store(useModifierMode, std::memory_order_relaxed);
                     if (useModifierMode) {
                         const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
                         PerformAction(modifierHeld ? rightPowerAttackAction : rightAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed));
                     }
+                }
+
+                if (a_event->IsUp()) {
+                    rightAttackHeld.store(false, std::memory_order_relaxed);
+                    holdRepeatArmed.store(false, std::memory_order_relaxed);
                 }
 
                 // Modifier-right mode chooses an action on button-down and owns the custom
@@ -336,6 +343,8 @@ class hooks {
                     if (alreadyPerformed.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
                         if (!PerformAction(rightPowerAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed))) {
                             alreadyPerformed.store(false, std::memory_order_relaxed);
+                        } else if (settings::IsBaseHoldRepeatEnabled()) {
+                            holdRepeatArmed.store(true, std::memory_order_relaxed);
                         }
                         
                     }
@@ -345,6 +354,39 @@ class hooks {
 
             return _ProcessButton(a_this, a_event, a_data);
         }
+        static RE::BSEventNotifyControl ProcessEvent_PC(
+            RE::BSTEventSink<RE::BSAnimationGraphEvent>* a_sink,
+            RE::BSAnimationGraphEvent* a_event,
+            RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_eventSource) {
 
-        // Modifier-key input tracking is handled by ModifierInputSink.
+            // Most graph events take this fast path: no config mutex/copy and no tag comparison.
+            if (!a_event || !a_event->holder || !settings::IsBaseHoldRepeatEnabled() ||
+                !rightAttackHeld.load(std::memory_order_relaxed) ||
+                !holdRepeatArmed.load(std::memory_order_relaxed)) {
+                return _originalPC(a_sink, a_event, a_eventSource);
+            }
+
+            static auto* player = RE::PlayerCharacter::GetSingleton();
+            if (!player || a_event->holder != player) {
+                return _originalPC(a_sink, a_event, a_eventSource);
+            }
+
+            // Cache interned names so matching uses BSFixedString pointer equality.
+            static const RE::BSFixedString mcoPowerWindowOpen{ "MCO_PowerWinOpen" };
+            static const RE::BSFixedString bfcoNextPowerWindowStart{ "BFCO_NextPowerWinStart" };
+            if (a_event->tag == mcoPowerWindowOpen || a_event->tag == bfcoNextPowerWindowStart) {
+                bool expected = false;
+                if (holdRepeatActionQueued.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+                    const bool queued = PerformAction(rightPowerAttackAction, player, false, [] {
+                        holdRepeatActionQueued.store(false, std::memory_order_relaxed);
+                    });
+                    if (!queued) {
+                        holdRepeatActionQueued.store(false, std::memory_order_relaxed);
+                    }
+                }
+            }
+
+            return _originalPC(a_sink, a_event, a_eventSource);
+        }
+        static inline REL::Relocation<decltype(ProcessEvent_PC)> _originalPC;
 };
