@@ -243,20 +243,24 @@ namespace settings {
         static constexpr const char* attackInputModes[] = {
             "Hold RightAttack",
             "Alt Power Key",
-            "Modifier + RightAttack"
+            "Modifier + RightAttack",
+            "Left Attack Power Attack"
         };
         
-        int attackInputMode = cfg.useAltPowerKeyBind ? 1 : (cfg.modifierRightMode ? 2 : 0);
+        int attackInputMode = cfg.leftAttackPA ? 3 : (cfg.useAltPowerKeyBind ? 1 : (cfg.modifierRightMode ? 2 : 0));
         const bool normalizedAltMode = attackInputMode == 1;
         const bool normalizedModifierMode = attackInputMode == 2;
-        if (cfg.useAltPowerKeyBind != normalizedAltMode || cfg.modifierRightMode != normalizedModifierMode) {
+        const bool normalizedLeftAttackMode = attackInputMode == 3;
+        if (cfg.useAltPowerKeyBind != normalizedAltMode || cfg.modifierRightMode != normalizedModifierMode || cfg.leftAttackPA != normalizedLeftAttackMode) {
             cfg.useAltPowerKeyBind = normalizedAltMode;
             cfg.modifierRightMode = normalizedModifierMode;
+            cfg.leftAttackPA = normalizedLeftAttackMode;
             changed = true;
         }
-        if (ImGuiMCP::Combo("Power Attack Input Mode", &attackInputMode, attackInputModes, 3)) {
+        if (ImGuiMCP::Combo("Power Attack Input Mode", &attackInputMode, attackInputModes, 4)) {
             cfg.useAltPowerKeyBind = attackInputMode == 1;
             cfg.modifierRightMode = attackInputMode == 2;
+            cfg.leftAttackPA = attackInputMode == 3;
             changed = true;
         }
 
@@ -327,6 +331,24 @@ namespace settings {
                 changed = true;
             }
         }
+
+        ImGuiMCP::BeginDisabled(!cfg.useAltPowerKeyBind);
+        changed |= ImGuiMCP::Checkbox("Require Modifier for Alt Power Key", &cfg.useModifierAltPA);
+        ImGuiMCP::EndDisabled();
+
+        static constexpr const char* leftAttackModes[] = {
+            "Moving: power attack; stationary: default block/cast",
+            "Stationary: power attack; moving: default block/cast",
+            "Spell: cast stationary, power attack moving; other: power attack",
+            "Spell: cast moving, power attack stationary; other: power attack"
+        };
+        if (cfg.defaultBehaviorMode < 0 || cfg.defaultBehaviorMode >= 4) {
+            cfg.defaultBehaviorMode = 0;
+            changed = true;
+        }
+        ImGuiMCP::BeginDisabled(!cfg.leftAttackPA);
+        changed |= ImGuiMCP::Combo("Left Attack Behavior", &cfg.defaultBehaviorMode, leftAttackModes, 4);
+        ImGuiMCP::EndDisabled();
 
         
         changed |= ImGuiMCP::Checkbox("Enable Log", &cfg.log);

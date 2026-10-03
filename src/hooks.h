@@ -13,6 +13,7 @@
 class hooks {
     using ProcessButton_t = void (*)(RE::AttackBlockHandler*, RE::ButtonEvent*, RE::PlayerControlsData*);
     static inline ProcessButton_t _ProcessButton = nullptr;
+    enum class LeftAttackRoute : std::uint8_t { kVanilla, kPowerAttack };
 
     public:
         static inline std::atomic_bool modifierPressed = false;
@@ -57,6 +58,7 @@ class hooks {
         static inline std::atomic_bool rightAttackUsesVanilla = false;
         static inline std::atomic_bool rightAttackCancelsBlock = false;
         static inline std::atomic_bool rightAttackUsesModifierMode = false;
+        static inline std::atomic<LeftAttackRoute> leftAttackRoute = LeftAttackRoute::kVanilla;
         static inline std::atomic_int trackedModifierKey = -2;
         static inline std::atomic_int trackedCancelBlockKey = -2;
         static inline std::atomic_bool bindModifierKey = false;
@@ -101,8 +103,11 @@ class hooks {
                         }
                     }
 
-                    if (cfg.useAltPowerKeyBind && altPowerKey > 0 && altPowerKey == keyCode) {
-                        PerformAction(rightPowerAttackAction,  RE::PlayerCharacter::GetSingleton(), cfg.eldenCounterMode);
+                    if (cfg.useAltPowerKeyBind && altPowerKey > 0 && altPowerKey == keyCode && btn->IsPressed()) {
+                        const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
+                        if (!cfg.useModifierAltPA || modifierHeld) {
+                            PerformAction(rightPowerAttackAction, RE::PlayerCharacter::GetSingleton(), cfg.eldenCounterMode);
+                        }
                     }
                 }
 
@@ -189,6 +194,54 @@ class hooks {
             }
             auto cfg = settings::Get();
             if (!utils::isRightMelee(player)) return _ProcessButton(a_this, a_event, a_data);
+            // Choose the left-input behavior on the initial press and keep it
+            // fixed through release. Vanilla handling retains cast and block/bash behavior.
+            if (a_event->QUserEvent() == userEvents->leftAttack) {
+                if (a_event->IsDown()) {
+                    bool usePowerAttack = false;
+                    if (cfg.leftAttackPA) {
+                        const bool leftSpell = utils::isLeftSpell(player);
+                        const bool stationary = utils::isNeutral();
+
+                        switch (cfg.defaultBehaviorMode) {
+                        case 0: // Stationary uses the default block/cast; movement uses power attack.
+                            usePowerAttack = !stationary;
+                            break;
+                        case 1: // Moving uses the default block/cast; stationary uses power attack.
+                            usePowerAttack = stationary;
+                            break;
+                        case 2: // Stationary spell cast; non-spell input becomes power attack.
+                            usePowerAttack = !leftSpell || !stationary;
+                            break;
+                        case 3: // Moving spell cast; non-spell input becomes power attack.
+                            usePowerAttack = !leftSpell || stationary;
+                            break;
+                        default:
+                            usePowerAttack = false;
+                            break;
+                        }
+                    }
+
+                    const auto route = usePowerAttack ? LeftAttackRoute::kPowerAttack : LeftAttackRoute::kVanilla;
+                    leftAttackRoute.store(route, std::memory_order_relaxed);
+                    if (route == LeftAttackRoute::kPowerAttack && !PerformAction(rightPowerAttackAction, player)) {
+                        // If queuing failed, preserve normal input instead of swallowing it.
+                        leftAttackRoute.store(LeftAttackRoute::kVanilla, std::memory_order_relaxed);
+                    }
+                }
+
+                if (leftAttackRoute.load(std::memory_order_relaxed) == LeftAttackRoute::kPowerAttack) {
+                    if (a_event->IsUp()) {
+                        leftAttackRoute.store(LeftAttackRoute::kVanilla, std::memory_order_relaxed);
+                    }
+                    return;
+                }
+
+                if (a_event->IsUp()) {
+                    leftAttackRoute.store(LeftAttackRoute::kVanilla, std::memory_order_relaxed);
+                }
+                return _ProcessButton(a_this, a_event, a_data);
+            }
             // Defer short inputs until release; issue a power attack once the hold threshold is reached.
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {

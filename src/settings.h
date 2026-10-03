@@ -16,6 +16,17 @@ namespace settings {
 
         bool useAltPowerKeyBind = false;
         int altPowerKey = -1;
+        bool useModifierAltPA = false;
+
+        bool leftAttackPA = false;
+        // 0 means stationary for left spell/staff cast or block, movement is power attack.
+        // 1 means movement for left spell/staff cast or block, stationary is power attack.
+        // 2 means stationary for left spell/staff cast only. Block always ends up replaced by power attack, movement is power attack
+        // 3 means movement for left spell/staff cast only. bBlock always ends up replaced by power attack, stationary is power attack
+        int defaultBehaviorMode = 0;
+        //0 - disabled, 1 means MOD + LA = PA / LA = Cast/Block, 2 - Mod+LA -> cast/block | LA = PA, 
+        // 3 - mod+LA -> Cast/PA, LA = PA
+        int useModifierLeftPA = 0;
     };
     
     template <class T>
@@ -35,6 +46,9 @@ namespace settings {
 
         setting_definition<bool>{ "useAltPowerKeyBind", &settings::config::useAltPowerKeyBind },
         setting_definition<int>{ "altPowerKey", &settings::config::altPowerKey },
+        setting_definition<bool>{ "useModifierAltPA", &settings::config::useModifierAltPA },
+        setting_definition<bool>{ "leftAttackPA", &settings::config::leftAttackPA },
+        setting_definition<int>{ "defaultBehaviorMode", &settings::config::defaultBehaviorMode },
     };
 
     config Get();
@@ -42,7 +56,7 @@ namespace settings {
     void Load();
     bool Save();
 
-    void __stdcall RenderMenuPage();
+    void __stdcall RenderMenuPage();    
 
     void RegisterMenu();
 }

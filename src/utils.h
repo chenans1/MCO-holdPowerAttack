@@ -20,6 +20,16 @@ namespace utils {
         return (rightHand == 0);
     }
 
+
+    static inline bool isLeftSpell(RE::Actor* actor) {
+        if (!actor) {
+            return false;
+        }
+        int leftHand = 0;
+        actor->GetGraphVariableInt("iLeftHandType", leftHand);
+        return (leftHand == 8 || leftHand == 9);
+    }
+
     static inline int toKeyCode(const RE::ButtonEvent& event) {
         const auto device = event.device.get();
         const auto id = event.GetIDCode();
