@@ -24,22 +24,24 @@ namespace settings {
     std::atomic_bool unsavedChanges = false;
 
     namespace {
-        std::atomic_bool captureModifierKey = false;
+        enum class BindingTarget : std::uint8_t { none, modifier, cancelBlock };
+        std::atomic<BindingTarget> captureTarget = BindingTarget::none;
         std::atomic_bool waitingForCaptureRelease = false;
-        SKSEMenuFramework::Model::InputEvent* modifierKeyMenuInputEvent = nullptr;
+        SKSEMenuFramework::Model::InputEvent* bindingMenuInputEvent = nullptr;
 
-        void StartModifierKeyCapture() {
+        void StartBindingCapture(const BindingTarget target) {
             waitingForCaptureRelease.store(true, std::memory_order_release);
-            captureModifierKey.store(true, std::memory_order_release);
+            captureTarget.store(target, std::memory_order_release);
         }
 
-        void StopModifierKeyCapture() {
-            captureModifierKey.store(false, std::memory_order_release);
+        void StopBindingCapture() {
+            captureTarget.store(BindingTarget::none, std::memory_order_release);
             waitingForCaptureRelease.store(false, std::memory_order_release);
         }
 
-        bool __stdcall OnModifierKeyInput(RE::InputEvent* event) {
-            if (!captureModifierKey.load(std::memory_order_acquire)) {
+        bool __stdcall OnBindingInput(RE::InputEvent* event) {
+            const auto target = captureTarget.load(std::memory_order_acquire);
+            if (target == BindingTarget::none) {
                 return false;
             }
 
@@ -71,15 +73,25 @@ namespace settings {
 
             // Escape cancels capture by unbinding, matching the menu hint.
             if (button->device.get() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == 0x01) {
-                SetModifierKeyFromInput(-1);
-                StopModifierKeyCapture();
-                SKSE::log::info("[settings] Modifier key unbound from capture");
+                if (target == BindingTarget::modifier) {
+                    SetModifierKeyFromInput(-1);
+                    SKSE::log::info("[settings] Modifier key unbound from capture");
+                } else {
+                    SetCancelBlockKeyFromInput(-1);
+                    SKSE::log::info("[settings] Cancel block key unbound from capture");
+                }
+                StopBindingCapture();
                 return true;
             }
 
-            SetModifierKeyFromInput(keyCode);
-            StopModifierKeyCapture();
-            SKSE::log::info("[settings] Bound modifier input to key code {}", keyCode);
+            if (target == BindingTarget::modifier) {
+                SetModifierKeyFromInput(keyCode);
+                SKSE::log::info("[settings] Bound modifier input to key code {}", keyCode);
+            } else {
+                SetCancelBlockKeyFromInput(keyCode);
+                SKSE::log::info("[settings] Bound cancel block input to key code {}", keyCode);
+            }
+            StopBindingCapture();
             return true;
         }
     }
@@ -151,8 +163,16 @@ namespace settings {
         unsavedChanges = true;
     }
 
+    void SetCancelBlockKeyFromInput(const int keyCode) {
+        {
+            std::scoped_lock lock(configMutex);
+            activeConfig.cancelBlockKey = keyCode;
+        }
+        unsavedChanges = true;
+    }
+
     void Load() {
-        StopModifierKeyCapture();
+        StopBindingCapture();
         config loaded{};
         CSimpleIniA ini;
         ini.SetUnicode(false);
@@ -224,22 +244,36 @@ namespace settings {
         auto cfg = Get();
         bool changed = false;
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
-        changed |= ImGuiMCP::Checkbox("Bashing requires block key to be held", &cfg.eldenCounterMode);
-
+        changed |= ImGuiMCP::Checkbox("Hold cancel block key to attack instead of bash during block", &cfg.eldenCounterMode);
         changed |= ImGuiMCP::Checkbox("Use modifier + RightAttack instead", &cfg.modifierRightMode);
 
-        std::string modifierKeyName = "Unbound";
-        if (cfg.modifierKey >= 0) {
-            modifierKeyName = std::to_string(cfg.modifierKey);
-        }
-        ImGuiMCP::Text("Modifier Key Code: %s", modifierKeyName.c_str());
-
-        const bool isCapturingModifierKey = captureModifierKey.load(std::memory_order_relaxed);
-        if (isCapturingModifierKey) {
-            ImGuiMCP::TextUnformatted("Press a key or button to bind it (ESC unbinds)");
+        const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
+        const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
+        
+        const std::string cancelBlockKeyName = cfg.cancelBlockKey < 0 ? "Unbound" : std::to_string(cfg.cancelBlockKey);
+        ImGuiMCP::Text("Cancel Block Key Code: %s", cancelBlockKeyName.c_str());
+        if (activeCapture == BindingTarget::cancelBlock) {
+            ImGuiMCP::TextUnformatted("Listening for cancel block key (ESC unbinds)");
         } else {
+            if (activeCapture == BindingTarget::none) {
+                if (ImGuiMCP::Button("Bind Cancel Block Key")) {
+                    StartBindingCapture(BindingTarget::cancelBlock);
+                }
+                ImGuiMCP::SameLine();
+                if (ImGuiMCP::Button("Unbind Cancel Block Key")) {
+                    cfg.cancelBlockKey = -1;
+                    Set(cfg);
+                    changed = true;
+                }
+            }
+        }
+
+        ImGuiMCP::Text("Modifier Key Code: %s", modifierKeyName.c_str());
+        if (activeCapture == BindingTarget::modifier) {
+            ImGuiMCP::TextUnformatted("Listening for modifier key (ESC unbinds)");
+        } else if (activeCapture == BindingTarget::none) {
             if (ImGuiMCP::Button("Bind Modifier Key")) {
-                StartModifierKeyCapture();
+                StartBindingCapture(BindingTarget::modifier);
             }
             ImGuiMCP::SameLine();
             if (ImGuiMCP::Button("Unbind Modifier Key")) {
@@ -248,6 +282,8 @@ namespace settings {
                 changed = true;
             }
         }
+
+        
         changed |= ImGuiMCP::Checkbox("Enable Log", &cfg.log);
         if (changed) {
             Set(cfg);
@@ -267,8 +303,8 @@ namespace settings {
             SKSE::log::warn("[settings] SKSE Menu Framework DLL exists but is not loaded");
             return;
         }
-        if (!modifierKeyMenuInputEvent) {
-            modifierKeyMenuInputEvent = SKSEMenuFramework::AddInputEvent(OnModifierKeyInput);
+        if (!bindingMenuInputEvent) {
+            bindingMenuInputEvent = SKSEMenuFramework::AddInputEvent(OnBindingInput);
         }
         SKSEMenuFramework::SetSection("Hold PowerAttack");
         SKSEMenuFramework::AddSectionItem("Settings", RenderMenuPage);

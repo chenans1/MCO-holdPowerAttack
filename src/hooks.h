@@ -15,6 +15,7 @@ class hooks {
 
     public:
         static inline std::atomic_bool modifierPressed = false;
+        static inline std::atomic_bool cancelBlockKeyPressed = false;
 
         static inline RE::BGSAction* rightAttackAction = nullptr;
         static inline RE::BGSAction* rightPowerAttackAction = nullptr;
@@ -42,7 +43,7 @@ class hooks {
 
             auto* inputMgr = RE::BSInputDeviceManager::GetSingleton();
             if (!inputMgr) {
-                SKSE::log::warn("BSInputDeviceManager not available; modifier key input will not work");
+                SKSE::log::warn("BSInputDeviceManager not available; modifier and cancel block input will not work");
             } else {
                 inputMgr->AddEventSink(&modifierInputSink);
                 SKSE::log::info("Modifier key input sink registered");
@@ -52,11 +53,11 @@ class hooks {
 
     private:
         static inline std::atomic_bool alreadyPerformed = false;
-        static inline std::atomic_bool blockHeld = false;
         static inline std::atomic_bool rightAttackUsesVanilla = false;
         static inline std::atomic_bool rightAttackCancelsBlock = false;
         static inline std::atomic_bool rightAttackUsesModifierMode = false;
         static inline std::atomic_int trackedModifierKey = -2;
+        static inline std::atomic_int trackedCancelBlockKey = -2;
         static inline std::atomic_bool bindModifierKey = false;
 
         class ModifierInputSink final : public RE::BSTEventSink<RE::InputEvent*> {
@@ -68,8 +69,12 @@ class hooks {
 
                 auto cfg = settings::Get();
                 const int modifierKey = cfg.modifierKey;
+                const int cancelBlockKey = cfg.cancelBlockKey;
                 if (trackedModifierKey.exchange(modifierKey, std::memory_order_relaxed) != modifierKey) {
                     modifierPressed.store(false, std::memory_order_relaxed);
+                }
+                if (trackedCancelBlockKey.exchange(cancelBlockKey, std::memory_order_relaxed) != cancelBlockKey) {
+                    cancelBlockKeyPressed.store(false, std::memory_order_relaxed);
                 }
 
                 for (auto ev = *a_events; ev != nullptr; ev = ev->next) {
@@ -84,7 +89,14 @@ class hooks {
                         } else if (btn->IsUp()) {
                             modifierPressed.store(false, std::memory_order_relaxed);
                         }
-                        
+                    }
+
+                    if (cancelBlockKey >= 0 && cancelBlockKey == keyCode) {
+                        if (btn->IsPressed()) {
+                            cancelBlockKeyPressed.store(true, std::memory_order_relaxed);
+                        } else if (btn->IsUp()) {
+                            cancelBlockKeyPressed.store(false, std::memory_order_relaxed);
+                        }
                     }
                 }
 
@@ -126,21 +138,15 @@ class hooks {
             }
             auto cfg = settings::Get();
             if (!utils::isRightMelee(player)) return _ProcessButton(a_this, a_event, a_data);
-            if (a_event->QUserEvent() == userEvents->leftAttack) {
-                if (a_event->IsUp()) {
-                    blockHeld.store(false, std::memory_order_relaxed);
-                } else if (a_event->IsPressed()) {
-                    blockHeld.store(true, std::memory_order_relaxed);
-                }
-                return _ProcessButton(a_this, a_event, a_data);
-            }
             // Defer short inputs until release; issue a power attack once the hold threshold is reached.
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {
                     alreadyPerformed.store(false, std::memory_order_relaxed);
-                    const bool blockKeyHeld = blockHeld.load(std::memory_order_relaxed);
-                    rightAttackUsesVanilla.store(cfg.eldenCounterMode ? blockKeyHeld : player->IsBlocking(), std::memory_order_relaxed);
-                    rightAttackCancelsBlock.store(cfg.eldenCounterMode && !blockKeyHeld, std::memory_order_relaxed);
+                    const bool cancelBlock = cfg.eldenCounterMode
+                        && player->IsBlocking()
+                        && cancelBlockKeyPressed.load(std::memory_order_relaxed);
+                    rightAttackUsesVanilla.store(player->IsBlocking() && !cancelBlock, std::memory_order_relaxed);
+                    rightAttackCancelsBlock.store(cancelBlock, std::memory_order_relaxed);
 
                     // Modifier mode uses the same vanilla block/bash route as hold mode.
                     // Only take over the press when the normal attack route is selected.
