@@ -7,7 +7,7 @@ set(BUILD_TESTS OFF CACHE BOOL "Build unit tests for CommonLibVR." FORCE)
 set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
 
 # Set your project name. This will be the name of your SKSE .dll file.
-project(MCOHoldPowerAttack VERSION 0.0.1 LANGUAGES CXX)
+project(ModernPowerAttackInput VERSION 0.0.1 LANGUAGES CXX)
 
 #set(OUTPUT_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/output")
 set(OUTPUT_FOLDER "D:/Skyrim SE MO2/mods/MCO Hold PowerAttack")

@@ -69,8 +69,6 @@ class hooks {
         static inline std::atomic_bool rightAttackCancelsBlock = false;
         static inline std::atomic_bool rightAttackUsesModifierMode = false;
         static inline std::atomic<LeftAttackRoute> leftAttackRoute = LeftAttackRoute::kVanilla;
-        static inline std::atomic_int trackedModifierKey = -2;
-        static inline std::atomic_int trackedCancelBlockKey = -2;
         static inline std::atomic_bool bindModifierKey = false;
 
         class ModifierInputSink final : public RE::BSTEventSink<RE::InputEvent*> {
@@ -84,10 +82,10 @@ class hooks {
                 const int modifierKey = cfg.modifierKey;
                 const int cancelBlockKey = cfg.cancelBlockKey;
                 const int altPowerKey = cfg.altPowerKey;
-                if (trackedModifierKey.exchange(modifierKey, std::memory_order_relaxed) != modifierKey) {
+                if (modifierKey < 0) {
                     modifierPressed.store(false, std::memory_order_relaxed);
                 }
-                if (trackedCancelBlockKey.exchange(cancelBlockKey, std::memory_order_relaxed) != cancelBlockKey) {
+                if (cancelBlockKey < 0) {
                     cancelBlockKeyPressed.store(false, std::memory_order_relaxed);
                 }
 

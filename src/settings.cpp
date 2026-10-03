@@ -411,7 +411,7 @@ namespace settings {
         if (!bindingMenuInputEvent) {
             bindingMenuInputEvent = SKSEMenuFramework::AddInputEvent(OnBindingInput);
         }
-        SKSEMenuFramework::SetSection("Hold PowerAttack");
+        SKSEMenuFramework::SetSection("Modern Power Attack Control");
         SKSEMenuFramework::AddSectionItem("Settings", RenderMenuPage);
         SKSE::log::info("[settings] Registered SKSE Menu Framework page");
     }
