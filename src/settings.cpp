@@ -238,46 +238,63 @@ namespace settings {
         auto cfg = Get();
         bool changed = false;
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
-        changed |= ImGuiMCP::Checkbox("Hold cancel block key to attack instead of bash during block", &cfg.eldenCounterMode);
+        // changed |= ImGuiMCP::Checkbox("Attacks can cancel Block", &cfg.eldenCounterMode);
 
-        static constexpr const char* movementCancelModes[] = {
-            "Disabled",
-            "When stationary",
-            "When moving"
+        static constexpr const char* attackInputModes[] = {
+            "Hold RightAttack",
+            "Alt Power Key",
+            "Modifier + RightAttack"
         };
-        if (cfg.movementCancelMode < 0 || cfg.movementCancelMode >= 3) {
-            cfg.movementCancelMode = 0;
+        
+        int attackInputMode = cfg.useAltPowerKeyBind ? 1 : (cfg.modifierRightMode ? 2 : 0);
+        const bool normalizedAltMode = attackInputMode == 1;
+        const bool normalizedModifierMode = attackInputMode == 2;
+        if (cfg.useAltPowerKeyBind != normalizedAltMode || cfg.modifierRightMode != normalizedModifierMode) {
+            cfg.useAltPowerKeyBind = normalizedAltMode;
+            cfg.modifierRightMode = normalizedModifierMode;
             changed = true;
         }
-        ImGuiMCP::BeginDisabled(!cfg.eldenCounterMode);
-        changed |= ImGuiMCP::Combo("Movement Cancel Mode", &cfg.movementCancelMode, movementCancelModes, 3);
-        ImGuiMCP::EndDisabled();
-        changed |= ImGuiMCP::Checkbox("Use modifier + RightAttack instead", &cfg.modifierRightMode);
-        changed |= ImGuiMCP::Checkbox("Enable Alt Power Key", &cfg.useAltPowerKeyBind);
-
-        const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
-        const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
-        const std::string cancelBlockKeyName = cfg.cancelBlockKey < 0 ? "Unbound" : std::to_string(cfg.cancelBlockKey);
-        const std::string altPowerKeyName = cfg.altPowerKey < 0 ? "Unbound" : std::to_string(cfg.altPowerKey);
-
-        ImGuiMCP::Text("Cancel Block Key Code: %s", cancelBlockKeyName.c_str());
-        if (activeCapture == BindingTarget::cancelBlock) {
-            ImGuiMCP::TextUnformatted("Listening for cancel block key (ESC unbinds)");
-        } else {
-            if (activeCapture == BindingTarget::none) {
-                if (ImGuiMCP::Button("Bind Cancel Block Key")) {
-                    StartBindingCapture(BindingTarget::cancelBlock);
-                }
-                ImGuiMCP::SameLine();
-                if (ImGuiMCP::Button("Unbind Cancel Block Key")) {
-                    cfg.cancelBlockKey = -1;
-                    SetKeyFromInput(BindingTarget::cancelBlock, -1);
-                    Set(cfg);
-                    changed = true;
-                }
-            }
+        if (ImGuiMCP::Combo("Power Attack Input Mode", &attackInputMode, attackInputModes, 3)) {
+            cfg.useAltPowerKeyBind = attackInputMode == 1;
+            cfg.modifierRightMode = attackInputMode == 2;
+            changed = true;
         }
 
+        // static constexpr const char* movementCancelModes[] = {
+        //     "Disabled",
+        //     "When stationary",
+        //     "When moving"
+        // };
+        // if (cfg.movementCancelMode < 0 || cfg.movementCancelMode >= 3) {
+        //     cfg.movementCancelMode = 0;
+        //     changed = true;
+        // }
+        // ImGuiMCP::BeginDisabled(!cfg.eldenCounterMode);
+        // changed |= ImGuiMCP::Combo("Movement Cancel Mode", &cfg.movementCancelMode, movementCancelModes, 3);
+        // ImGuiMCP::EndDisabled();
+
+        const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
+       
+        // const std::string cancelBlockKeyName = cfg.cancelBlockKey < 0 ? "Unbound" : std::to_string(cfg.cancelBlockKey);
+        // ImGuiMCP::Text("Cancel Block Key Code: %s", cancelBlockKeyName.c_str());
+        // if (activeCapture == BindingTarget::cancelBlock) {
+        //     ImGuiMCP::TextUnformatted("Listening for cancel block key (ESC unbinds)");
+        // } else {
+        //     if (activeCapture == BindingTarget::none) {
+        //         if (ImGuiMCP::Button("Bind Cancel Block Key")) {
+        //             StartBindingCapture(BindingTarget::cancelBlock);
+        //         }
+        //         ImGuiMCP::SameLine();
+        //         if (ImGuiMCP::Button("Unbind Cancel Block Key")) {
+        //             cfg.cancelBlockKey = -1;
+        //             SetKeyFromInput(BindingTarget::cancelBlock, -1);
+        //             Set(cfg);
+        //             changed = true;
+        //         }
+        //     }
+        // }
+
+        const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
         ImGuiMCP::Text("Modifier Key Code: %s", modifierKeyName.c_str());
         if (activeCapture == BindingTarget::modifier) {
             ImGuiMCP::TextUnformatted("Listening for modifier key (ESC unbinds)");
@@ -294,7 +311,7 @@ namespace settings {
             }
         }
 
-
+        const std::string altPowerKeyName = cfg.altPowerKey < 0 ? "Unbound" : std::to_string(cfg.altPowerKey);
         ImGuiMCP::Text("Alt Power Attack Key Code: %s", altPowerKeyName.c_str());
         if (activeCapture == BindingTarget::altPowerKey) {
             ImGuiMCP::TextUnformatted("Listening for alt power key (ESC unbinds)");

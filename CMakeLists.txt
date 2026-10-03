@@ -35,6 +35,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/extern
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/CLibUtilsQTR/include
 )
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.

@@ -27,7 +27,7 @@ namespace settings {
     constexpr auto setting_definitions = std::tuple{
         setting_definition<bool>{ "log", &settings::config::log },
         setting_definition<float>{ "HoldDuration", &settings::config::HoldDuration },
-        setting_definition<bool>{ "eldenCounterMode", &settings::config::eldenCounterMode },
+        // setting_definition<bool>{ "eldenCounterMode", &settings::config::eldenCounterMode },
         setting_definition<int>{ "modifierKey", &settings::config::modifierKey },
         setting_definition<int>{ "cancelBlockKey", &settings::config::cancelBlockKey },
         setting_definition<int>{ "movementCancelMode", &settings::config::movementCancelMode },

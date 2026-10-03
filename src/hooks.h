@@ -102,7 +102,7 @@ class hooks {
                     }
 
                     if (cfg.useAltPowerKeyBind && altPowerKey > 0 && altPowerKey == keyCode) {
-                        PerformAction(rightPowerAttackAction,  RE::PlayerCharacter::GetSingleton());
+                        PerformAction(rightPowerAttackAction,  RE::PlayerCharacter::GetSingleton(), cfg.eldenCounterMode);
                     }
                 }
 
@@ -144,18 +144,18 @@ class hooks {
             if (!action || !actor) return false;
 
             if (auto taskInterface = SKSE::GetTaskInterface()) {
-                actor->AsActorState()->actorState1.meleeAttackState = RE::ATTACK_STATE_ENUM::kHit;
-                RE::ATTACK_STATE_ENUM currentState = (actor->AsActorState()->actorState1.meleeAttackState);
-                SKSE::log::info("Before currentState = {}",  static_cast<std::uint32_t>(currentState));
+                // actor->AsActorState()->actorState1.meleeAttackState = RE::ATTACK_STATE_ENUM::kHit;
+                // RE::ATTACK_STATE_ENUM currentState = (actor->AsActorState()->actorState1.meleeAttackState);
+                // SKSE::log::info("Before currentState = {}",  static_cast<std::uint32_t>(currentState));
                 taskInterface->AddTask([action, actor, cancelBlock](){
                     //off hand key must be held
                     if (cancelBlock) {
-                        actor->NotifyAnimationGraph("attackStop");
-                        actor->AsActorState()->actorState2.wantBlocking = 0;
                         if (actor->IsBlocking()) {
-                            actor->NotifyAnimationGraph("blockStop");
+                            actor->NotifyAnimationGraph("blockStopInstant");
                         }
+                        actor->AsActorState()->actorState2.wantBlocking = 0;
                     }
+                    // actor->NotifyAnimationGraph("MCO_PreHitFrame");
                     // actor->AsActorState()->actorState1.meleeAttackState = RE::ATTACK_STATE_ENUM::kSwing;
                     
                     std::unique_ptr<RE::TESActionData> data(RE::TESActionData::Create());
@@ -164,18 +164,16 @@ class hooks {
                     using ProcessAction_t = bool (*)(RE::TESActionData*);
                     REL::Relocation<ProcessAction_t> processAction{ RELOCATION_ID(40551, 41557) };
                     processAction(data.get());
+                    // const bool isPowerAttack = action == rightPowerAttackAction;
+                    // utils::forceUpdateAttackData(isPowerAttack);
+                    // RE::ATTACK_STATE_ENUM currentState2 = (actor->AsActorState()->actorState1.meleeAttackState);
+                    // SKSE::log::info("after state = {}",  static_cast<std::uint32_t>(currentState2));
                 });
 
-                const bool isPowerAttack = action == rightPowerAttackAction;
-                utils::forceUpdateAttackData(isPowerAttack);
-                RE::ATTACK_STATE_ENUM currentState2 = (actor->AsActorState()->actorState1.meleeAttackState);
-                SKSE::log::info("after state = {}",  static_cast<std::uint32_t>(currentState2));
-
-                SKSE::log::info("isPowerAttacking = {}", actor->IsPowerAttacking());
-                bool isPowerAttackingVar = false;
-                if (actor->GetGraphVariableBool("IsPowerAttacking", isPowerAttackingVar) && isPowerAttackingVar) {
-                    SKSE::log::info("IsPowerAttacking Graph var = {}", isPowerAttackingVar);
-                }
+                // const bool isPowerAttack = action == rightPowerAttackAction;
+                // utils::forceUpdateAttackData(isPowerAttack);
+                // RE::ATTACK_STATE_ENUM currentState2 = (actor->AsActorState()->actorState1.meleeAttackState);
+                // SKSE::log::info("after state = {}",  static_cast<std::uint32_t>(currentState2));
                 
                 return true;
             }
@@ -195,6 +193,7 @@ class hooks {
             if (a_event->QUserEvent() == userEvents->rightAttack) {
                 if (a_event->IsDown()) {
                     alreadyPerformed.store(false, std::memory_order_relaxed);
+                    /*
                     bool cancelBlock = false;
                     if (cfg.eldenCounterMode && player->IsBlocking()) {
                         switch (cfg.movementCancelMode) {
@@ -209,8 +208,11 @@ class hooks {
                                 break;
                         }
                     }
-                    rightAttackUsesVanilla.store(player->IsBlocking() && !cancelBlock, std::memory_order_relaxed);
-                    rightAttackCancelsBlock.store(cancelBlock, std::memory_order_relaxed);
+                    */
+                    // Hold and modifier-right modes use vanilla bash behavior while blocking.
+                    // Block-cancel attacks are reserved for the alternative power key for now.
+                    rightAttackUsesVanilla.store(player->IsBlocking(), std::memory_order_relaxed);
+                    rightAttackCancelsBlock.store(false, std::memory_order_relaxed);
 
                     // Modifier mode uses the same vanilla block/bash route as hold mode.
                     // Only take over the press when the normal attack route is selected.
@@ -219,9 +221,6 @@ class hooks {
                     rightAttackUsesModifierMode.store(useModifierMode, std::memory_order_relaxed);
                     if (useModifierMode) {
                         const bool modifierHeld = modifierPressed.load(std::memory_order_relaxed);
-                        a_this->heldLeft = false;
-                        a_this->heldRight = false;
-                        a_this->SetHeldStateActive(false);
                         PerformAction(modifierHeld ? rightPowerAttackAction : rightAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed));
                     }
                 }
@@ -249,16 +248,10 @@ class hooks {
                     const bool performed = alreadyPerformed.exchange(false, std::memory_order_relaxed);
                     if (a_event->HeldDuration() < cfg.HoldDuration) {
                         if (!performed) {
-                            a_this->heldLeft = false;
-                            a_this->heldRight = false;
-                            a_this->SetHeldStateActive(false);
                             PerformAction(rightAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed));
                         }
                     } else {
                         if (!performed) {
-                            a_this->heldLeft = false;
-                            a_this->heldRight = false;
-                            a_this->SetHeldStateActive(false);
                             PerformAction(rightPowerAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed));
                         }
                     }
@@ -267,9 +260,6 @@ class hooks {
                 } else if (a_event->IsPressed() && a_event->HeldDuration() >= cfg.HoldDuration) {
                     bool expected = false;
                     if (alreadyPerformed.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
-                        a_this->heldLeft = false;
-                        a_this->heldRight = false;
-                        a_this->SetHeldStateActive(false);
                         if (!PerformAction(rightPowerAttackAction, player, rightAttackCancelsBlock.load(std::memory_order_relaxed))) {
                             alreadyPerformed.store(false, std::memory_order_relaxed);
                         }
