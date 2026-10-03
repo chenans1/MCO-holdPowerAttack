@@ -24,10 +24,30 @@ namespace settings {
     std::atomic_bool unsavedChanges = false;
 
     namespace {
-        enum class BindingTarget : std::uint8_t { none, modifier, cancelBlock };
+        enum class BindingTarget : std::uint8_t { none, modifier, cancelBlock, altPowerKey };
         std::atomic<BindingTarget> captureTarget = BindingTarget::none;
         std::atomic_bool waitingForCaptureRelease = false;
         SKSEMenuFramework::Model::InputEvent* bindingMenuInputEvent = nullptr;
+
+        void SetKeyFromInput(const BindingTarget target, const int keyCode) {
+            {
+                std::scoped_lock lock(configMutex);
+                switch (target) {
+                case BindingTarget::modifier:
+                    activeConfig.modifierKey = keyCode;
+                    break;
+                case BindingTarget::cancelBlock:
+                    activeConfig.cancelBlockKey = keyCode;
+                    break;
+                case BindingTarget::altPowerKey:
+                    activeConfig.altPowerKey = keyCode;
+                    break;
+                case BindingTarget::none:
+                    return;
+                }
+            }
+            unsavedChanges.store(true, std::memory_order_relaxed);
+        }
 
         void StartBindingCapture(const BindingTarget target) {
             waitingForCaptureRelease.store(true, std::memory_order_release);
@@ -73,24 +93,14 @@ namespace settings {
 
             // Escape cancels capture by unbinding, matching the menu hint.
             if (button->device.get() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == 0x01) {
-                if (target == BindingTarget::modifier) {
-                    SetModifierKeyFromInput(-1);
-                    SKSE::log::info("[settings] Modifier key unbound from capture");
-                } else {
-                    SetCancelBlockKeyFromInput(-1);
-                    SKSE::log::info("[settings] Cancel block key unbound from capture");
-                }
+                SetKeyFromInput(target, -1);
+                SKSE::log::info("[settings] Binding target {} unbound", static_cast<int>(target));
                 StopBindingCapture();
                 return true;
             }
 
-            if (target == BindingTarget::modifier) {
-                SetModifierKeyFromInput(keyCode);
-                SKSE::log::info("[settings] Bound modifier input to key code {}", keyCode);
-            } else {
-                SetCancelBlockKeyFromInput(keyCode);
-                SKSE::log::info("[settings] Bound cancel block input to key code {}", keyCode);
-            }
+            SetKeyFromInput(target, keyCode);
+            SKSE::log::info("[settings] Binding target {} bound to key code {}", static_cast<int>(target), keyCode);
             StopBindingCapture();
             return true;
         }
@@ -153,22 +163,6 @@ namespace settings {
     void Set(const config& value) {
         std::scoped_lock lock(configMutex);
         activeConfig = value;
-    }
-
-    void SetModifierKeyFromInput(const int keyCode) {
-        {
-            std::scoped_lock lock(configMutex);
-            activeConfig.modifierKey = keyCode;
-        }
-        unsavedChanges = true;
-    }
-
-    void SetCancelBlockKeyFromInput(const int keyCode) {
-        {
-            std::scoped_lock lock(configMutex);
-            activeConfig.cancelBlockKey = keyCode;
-        }
-        unsavedChanges = true;
     }
 
     void Load() {
@@ -245,12 +239,27 @@ namespace settings {
         bool changed = false;
         changed |= ImGuiMCP::SliderFloat("Power Attack Hold Duration", &cfg.HoldDuration, 0.01f, 0.5f, "%.2f");
         changed |= ImGuiMCP::Checkbox("Hold cancel block key to attack instead of bash during block", &cfg.eldenCounterMode);
+
+        static constexpr const char* movementCancelModes[] = {
+            "Disabled",
+            "When stationary",
+            "When moving"
+        };
+        if (cfg.movementCancelMode < 0 || cfg.movementCancelMode >= 3) {
+            cfg.movementCancelMode = 0;
+            changed = true;
+        }
+        ImGuiMCP::BeginDisabled(!cfg.eldenCounterMode);
+        changed |= ImGuiMCP::Combo("Movement Cancel Mode", &cfg.movementCancelMode, movementCancelModes, 3);
+        ImGuiMCP::EndDisabled();
         changed |= ImGuiMCP::Checkbox("Use modifier + RightAttack instead", &cfg.modifierRightMode);
+        changed |= ImGuiMCP::Checkbox("Enable Alt Power Key", &cfg.useAltPowerKeyBind);
 
         const auto activeCapture = captureTarget.load(std::memory_order_relaxed);
         const std::string modifierKeyName = cfg.modifierKey < 0 ? "Unbound" : std::to_string(cfg.modifierKey);
-        
         const std::string cancelBlockKeyName = cfg.cancelBlockKey < 0 ? "Unbound" : std::to_string(cfg.cancelBlockKey);
+        const std::string altPowerKeyName = cfg.altPowerKey < 0 ? "Unbound" : std::to_string(cfg.altPowerKey);
+
         ImGuiMCP::Text("Cancel Block Key Code: %s", cancelBlockKeyName.c_str());
         if (activeCapture == BindingTarget::cancelBlock) {
             ImGuiMCP::TextUnformatted("Listening for cancel block key (ESC unbinds)");
@@ -262,6 +271,7 @@ namespace settings {
                 ImGuiMCP::SameLine();
                 if (ImGuiMCP::Button("Unbind Cancel Block Key")) {
                     cfg.cancelBlockKey = -1;
+                    SetKeyFromInput(BindingTarget::cancelBlock, -1);
                     Set(cfg);
                     changed = true;
                 }
@@ -278,6 +288,24 @@ namespace settings {
             ImGuiMCP::SameLine();
             if (ImGuiMCP::Button("Unbind Modifier Key")) {
                 cfg.modifierKey = -1;
+                SetKeyFromInput(BindingTarget::modifier, -1);
+                Set(cfg);
+                changed = true;
+            }
+        }
+
+
+        ImGuiMCP::Text("Alt Power Attack Key Code: %s", altPowerKeyName.c_str());
+        if (activeCapture == BindingTarget::altPowerKey) {
+            ImGuiMCP::TextUnformatted("Listening for alt power key (ESC unbinds)");
+        } else if (activeCapture == BindingTarget::none) {
+            if (ImGuiMCP::Button("Bind Alt Power Key")) {
+                StartBindingCapture(BindingTarget::altPowerKey);
+            }
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Unbind Alt Power Key")) {
+                cfg.altPowerKey = -1;
+                SetKeyFromInput(BindingTarget::altPowerKey, -1);
                 Set(cfg);
                 changed = true;
             }
